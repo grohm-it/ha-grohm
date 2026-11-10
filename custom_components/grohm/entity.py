@@ -18,10 +18,11 @@ from .coordinator import GrohmConfigEntry, GrohmCoordinator
 
 
 def _model(device: Device) -> str:
-    phases = "three phase" if device.three_phase else "single phase"
-    if (kw := device.nominal_power_kw) is None:
-        return f"Charger, {phases}"
-    return f"{kw:g} kW charger, {phases}"
+    # Single phase chargers are always 7.4 kW. Three phase chargers are 11 or
+    # 22 kW, and the API cannot tell which.
+    return (
+        "Three phase charger" if device.three_phase else "Single phase charger, 7.4 kW"
+    )
 
 
 class GrohmEntity(CoordinatorEntity[GrohmCoordinator]):

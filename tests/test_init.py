@@ -37,7 +37,10 @@ async def test_private_account(
     assert sorted(device.name for device in devices) == ["Carport", "Garage"]
     garage = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, "1")})
     assert garage is not None
-    assert garage.model == "22 kW charger, three phase"
+    assert garage.model == "Three phase charger"
+    carport = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, "2")})
+    assert carport is not None
+    assert carport.model == "Single phase charger, 7.4 kW"
     assert garage.serial_number == "AA:BB:CC:DD:EE:01"
 
     assert hass.states.get("sensor.garage_status").state == "charging"
