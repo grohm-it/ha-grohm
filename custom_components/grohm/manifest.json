@@ -1,6 +1,9 @@
 {
   "domain": "grohm",
-  "name": "Grohm Wallbox",
+  "name": "Grohm",
+  "categories": [
+    "energy.ev_charging"
+  ],
   "codeowners": [],
   "config_flow": true,
   "documentation": "https://github.com/EmmeEsseSpA/ha-grohm",

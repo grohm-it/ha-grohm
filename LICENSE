@@ -1,0 +1,60 @@
+Grohm integration for Home Assistant - Licence Agreement
+
+Copyright (c) 2026 Emme Esse S.p.A. All rights reserved.
+
+DRAFT - to be reviewed by legal counsel before publication.
+
+1. Ownership
+   This software, including its source code, documentation and images (the
+   "Software"), is the property of Emme Esse S.p.A. ("Emme Esse"). "Grohm"
+   and the Grohm logos are registered trademarks of Emme Esse. This licence
+   does not grant any right to use them, except to identify the Software.
+
+2. Licence
+   Emme Esse grants you, free of charge, a non-exclusive, non-transferable,
+   revocable licence to download, install and use the Software, solely to
+   connect a Home Assistant installation to Grohm products and services that
+   you own, operate or are authorised to manage, for personal or business
+   purposes.
+
+3. Restrictions
+   Unless Emme Esse gives its prior written consent, you may not:
+   a) redistribute, sell, rent, sublicense or publish the Software or any
+      modified version of it, in whole or in part;
+   b) use the Software, or parts of it, to build other products or
+      services, or to access Grohm services other than as the Software does.
+   You may modify the Software for your own internal use only. Modified
+   versions are not supported.
+   Viewing and forking this repository on GitHub, as allowed by the GitHub
+   Terms of Service, does not grant any further right.
+
+4. Grohm services
+   The Software uses the Grohm cloud services, which remain subject to their
+   own terms of service. Emme Esse may change, limit or discontinue those
+   services, or the access the Software has to them, at any time.
+
+5. Changes and fees
+   Emme Esse may change this licence, and may make future versions of the
+   Software, or access to some of its functions or to the Grohm services
+   through it, subject to a fee. Changes apply to versions released after
+   the change.
+
+6. No warranty
+   The Software is provided "as is" and is used at your own risk, without
+   warranties of any kind, express or implied, including fitness for a
+   particular purpose, accuracy, availability and non-infringement.
+
+7. Limitation of liability
+   To the maximum extent permitted by applicable law, Emme Esse shall not be
+   liable for any direct or indirect damage arising from the use of, or the
+   inability to use, the Software, including damage to vehicles, chargers,
+   electrical installations or data, and loss of profit.
+
+8. Termination
+   This licence ends automatically if you breach it. On termination you must
+   stop using the Software and delete every copy of it.
+
+9. Governing law
+   This licence is governed by Italian law. The court of the place where
+   Emme Esse S.p.A. has its registered office has exclusive jurisdiction,
+   unless mandatory consumer protection rules provide otherwise.

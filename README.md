@@ -1,7 +1,7 @@
-# Grohm Wallbox per Home Assistant
+# Grohm per Home Assistant
 
-Integrazione personalizzata (custom component) che porta in Home Assistant le
-wallbox Grohm associate a un account **my-Grohm**, usando lo stesso backend
+Integrazione ufficiale **Grohm** (sviluppata da Emme Esse S.p.A., produttore
+delle wallbox Grohm) che porta in Home Assistant le wallbox Grohm associate a un account **my-Grohm**, usando lo stesso backend
 GraphQL dell'app (`https://api.grohm.it/graphql`).
 
 > Nota: in Home Assistant gli "add-on" sono container del Supervisor; per
@@ -45,13 +45,12 @@ connettività, energia totale e dati di configurazione.
 ## Installazione
 
 **HACS** (repository personalizzato): aggiungi l'URL del repository come
-*Integration*, installa "Grohm Wallbox" e riavvia Home Assistant.
+*Integration*, installa "Grohm" e riavvia Home Assistant.
 
 **Manuale**: copia `custom_components/grohm` nella cartella
 `config/custom_components/` di Home Assistant e riavvia.
 
-Poi: *Impostazioni → Dispositivi e servizi → Aggiungi integrazione → Grohm
-Wallbox* e inserisci email e password dell'app my-Grohm.
+Poi: *Impostazioni → Dispositivi e servizi → Aggiungi integrazione → Grohm* e inserisci email e password dell'app my-Grohm.
 
 Opzioni: intervallo di aggiornamento (default 30 s, min 10 s). L'elenco delle
 wallbox viene ricontrollato ogni 10 minuti: le nuove compaiono da sole.
@@ -88,23 +87,29 @@ server risponde HTTP 200 con `"User is not authenticated"` (o `me: null`),
 credenziali errate → `LoginError "Invalid email or password"`. Il flusso con
 un account reale (privato e gestore) resta da provare.
 
-## Percorso di pubblicazione
+## Pubblicazione
 
-**1. HACS (repository personalizzato)** — già possibile appena il repo è
-pubblico su GitHub: basta aggiungerne l'URL in HACS.
+L'integrazione è distribuita tramite il **Marketplace** di Home Assistant
+(integrato dalla 2026.11, ex HACS):
 
-**2. Lista predefinita HACS** — servono: repo pubblico con descrizione e
-topic, almeno una GitHub Release, workflow `hassfest` e `hacs/action` verdi
-(già in `.github/workflows/`), logo e icona nel repo
-[home-assistant/brands](https://github.com/home-assistant/brands), poi una PR
-a [hacs/default](https://github.com/hacs/default).
+1. repo pubblico su GitHub con descrizione, topic e issue attive;
+2. workflow `hassfest` e HACS verdi (in `.github/workflows/`), senza controlli
+   ignorati;
+3. una GitHub Release completa (non basta il tag) con versione uguale a
+   `version` del manifest;
+4. da subito installabile da link (badge My Home Assistant nel README);
+5. per comparire a tutti nel catalogo: PR a `hacs/default` aperta da un
+   account personale del proprietario del repo (la revisione richiede mesi).
 
-**3. Integrazione ufficiale (core)** — requisiti aggiuntivi:
-- spostare `api.py` in una **libreria Python pubblicata su PyPI** (licenza
-  OSI, rilasci automatici da CI) e dichiararla in `requirements` del manifest;
-- codice, commenti e `strings.json` in inglese (le altre lingue arrivano da
-  Lokalise, non dal repo);
-- prima PR con **una sola piattaforma** (es. `sensor`), le altre in PR
-  successive; requisiti del livello *Bronze* della Integration Quality Scale
-  (config flow testato al 100%, unique id, `runtime_data`, ecc.);
-- PR della documentazione su `home-assistant.io` e brand come al punto 2.
+Le immagini del marchio stanno in `custom_components/grohm/brand/`
+(supportate da Home Assistant 2026.3).
+
+## Licenza
+
+Software proprietario di Emme Esse S.p.A., gratuito da usare con i prodotti
+Grohm e fornito senza garanzia: vedi [LICENSE](LICENSE). Con questa licenza
+l'integrazione non può entrare nel core di Home Assistant (che richiede codice
+Apache-2.0 e librerie con licenza OSI).
+
+Grohm è un marchio registrato di Emme Esse S.p.A. Questo progetto non è
+affiliato né approvato da Home Assistant o dalla Open Home Foundation.
