@@ -4,7 +4,7 @@
   "categories": [
     "energy.ev_charging"
   ],
-  "codeowners": [],
+  "codeowners": ["@grohm-it"],
   "config_flow": true,
   "documentation": "https://github.com/grohm-it/ha-grohm",
   "integration_type": "hub",
