@@ -65,6 +65,10 @@ class FakeGrohmCloud:
         self.private_ids = ["1", "2"]
         self.networks = [["1"], ["3"]]
         self.orphan_ids = ["2"]
+        # Reads of the chargers before a command takes effect, like a charger
+        # that takes a while to pause.
+        self.command_delay = 0
+        self._pending: list[tuple[int, Any]] = []
 
     def _user(self) -> dict[str, Any]:
         return {
@@ -72,6 +76,12 @@ class FakeGrohmCloud:
             "email": "user@example.com",
             "accountType": self.account_type,
         }
+
+    def _apply(self, change: Any) -> None:
+        if self.command_delay:
+            self._pending.append((self.command_delay, change))
+        else:
+            change()
 
     @staticmethod
     def _page(items: list[Any]) -> dict[str, Any]:
@@ -111,21 +121,30 @@ class FakeGrohmCloud:
         if operation == "DevicesOutOfNet":
             return {"devicesOutOfNet": self._page([{"id": i} for i in self.orphan_ids])}
         if operation == "Devices":
+            self._pending = [(reads - 1, change) for reads, change in self._pending]
+            for _, change in [p for p in self._pending if p[0] < 0]:
+                change()
+            self._pending = [p for p in self._pending if p[0] >= 0]
             return {
                 f"d{i}": copy.deepcopy(self.devices.get(variables[f"id{i}"]))
                 for i in range(len(variables))
             }
         if operation == "EditDevice":
-            self.devices[variables["id"]].update(variables["input"])
+            device = self.devices[variables["id"]]
+            changes = variables["input"]
+            self._apply(lambda: device.update(changes))
             return {"editDevice": {"__typename": "EditDeviceSuccess"}}
         if operation == "ChangeDeviceStatus":
             session = self.devices[variables["deviceId"]]["currentSession"]
-            session["status"] = {
+            status = {
                 "PAUSED": "PAUSED",
                 "RUNNING": "CHARGING",
                 "RESUMED": "CHARGING",
             }[variables["status"]]
+            self._apply(lambda: session.update(status=status))
             return {"changeDeviceStatus": {"device": {"id": variables["deviceId"]}}}
+        if operation == "NotifyViewing":
+            return {"notifyDevice": {"device": {"id": variables["id"]}}}
         raise AssertionError(f"Unexpected operation {operation}")
 
 
@@ -141,7 +160,7 @@ def cloud() -> Generator[FakeGrohmCloud]:
 
     with (
         patch.object(GrohmClient, "_request", _request),
-        patch("custom_components.grohm.coordinator.COMMAND_REFRESH_DELAY", 0),
+        patch("custom_components.grohm.coordinator.COMMAND_POLL_INTERVAL", 0),
     ):
         yield fake
 
@@ -163,3 +182,11 @@ async def setup_integration(hass: HomeAssistant, entry: MockConfigEntry) -> None
     """Set up the integration."""
     await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
+
+
+async def call(hass: HomeAssistant, domain: str, service: str, entity_id: str) -> None:
+    """Call a service, and wait for the follow-up of the command."""
+    await hass.services.async_call(
+        domain, service, {"entity_id": entity_id}, blocking=True
+    )
+    await hass.async_block_till_done(wait_background_tasks=True)

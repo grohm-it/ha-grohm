@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from typing import Any
 
 from grohm import ChargingSession, Device
 
@@ -12,7 +13,7 @@ from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import COMMAND_TIMEOUT, DOMAIN
 from .coordinator import GrohmConfigEntry, GrohmCoordinator
 
 
@@ -49,6 +50,27 @@ class GrohmEntity(CoordinatorEntity[GrohmCoordinator]):
             name=device.name or device.serial_number,
             serial_number=device.serial_number or None,
         )
+
+    _optimistic: Any = None
+    _optimistic_until = 0.0
+
+    def _set_optimistic(self, value: Any) -> None:
+        """Show `value` until the charger reports it, or the command times out."""
+        self._optimistic = value
+        self._optimistic_until = self.hass.loop.time() + COMMAND_TIMEOUT
+        self.async_write_ha_state()
+
+    def _with_optimistic(self, actual: Any) -> Any:
+        """Return the requested state while a command is pending, else `actual`."""
+        if self._optimistic is None:
+            return actual
+        if (
+            actual == self._optimistic
+            or self.hass.loop.time() >= self._optimistic_until
+        ):
+            self._optimistic = None
+            return actual
+        return self._optimistic
 
     @property
     def device(self) -> Device | None:

@@ -12,8 +12,12 @@ LOGGER = logging.getLogger(__package__)
 SCAN_INTERVAL = timedelta(seconds=30)
 # How often to look for chargers that were added to or removed from the account.
 DISCOVERY_INTERVAL = timedelta(minutes=10)
-# Chargers take a few seconds to report the result of a command.
-COMMAND_REFRESH_DELAY = 3
+# After a command, the state is read again at this interval until the charger
+# reports the change, for at most COMMAND_TIMEOUT seconds. Until then the
+# entity shows the requested state. Chargers can take a while, a pause in
+# particular.
+COMMAND_POLL_INTERVAL = 4
+COMMAND_TIMEOUT = 90
 
 # Installers only have read-only access to the chargers of their customers,
 # so they are not supported.

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
+import contextlib
 from datetime import datetime
 
 from grohm import (
@@ -25,7 +26,8 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .const import (
-    COMMAND_REFRESH_DELAY,
+    COMMAND_POLL_INTERVAL,
+    COMMAND_TIMEOUT,
     DISCOVERY_INTERVAL,
     DOMAIN,
     LOGGER,
@@ -55,6 +57,7 @@ class GrohmCoordinator(DataUpdateCoordinator[dict[str, Device]]):
         self.client = client
         self.device_ids: list[str] = []
         self._last_discovery: datetime | None = None
+        self._follow_ups: dict[str, asyncio.Task[None]] = {}
 
     @property
     def is_manager(self) -> bool:
@@ -91,8 +94,18 @@ class GrohmCoordinator(DataUpdateCoordinator[dict[str, Device]]):
                 translation_placeholders={"error": str(err)},
             ) from err
 
-    async def async_command(self, command: Awaitable[None]) -> None:
-        """Send a command to a charger, then read the new state."""
+    async def async_command(
+        self,
+        command: Awaitable[None],
+        device_id: str,
+        done: Callable[[Device], bool],
+    ) -> None:
+        """Send a command to a charger, then follow it up in the background.
+
+        Returns as soon as the cloud accepts the command. The state is then
+        read again every few seconds until `done` is true for the charger,
+        or the command times out.
+        """
         try:
             await command
         except GrohmError as err:
@@ -101,5 +114,30 @@ class GrohmCoordinator(DataUpdateCoordinator[dict[str, Device]]):
                 translation_key="command_failed",
                 translation_placeholders={"error": str(err)},
             ) from err
-        await asyncio.sleep(COMMAND_REFRESH_DELAY)
-        await self.async_refresh()
+        if task := self._follow_ups.pop(device_id, None):
+            task.cancel()
+        self._follow_ups[device_id] = self.config_entry.async_create_background_task(
+            self.hass,
+            self._async_follow_up(device_id, done),
+            f"{DOMAIN} command follow-up {device_id}",
+        )
+
+    async def _async_follow_up(
+        self, device_id: str, done: Callable[[Device], bool]
+    ) -> None:
+        """Read the state until the charger reports the result of a command."""
+        # Ask the charger to report its state more often, like the app does.
+        with contextlib.suppress(GrohmError):
+            await self.client.notify_viewing(device_id)
+        # One more read after the entities stop showing the requested state.
+        deadline = self.hass.loop.time() + COMMAND_TIMEOUT + COMMAND_POLL_INTERVAL
+        try:
+            while self.hass.loop.time() < deadline:
+                await asyncio.sleep(COMMAND_POLL_INTERVAL)
+                await self.async_refresh()
+                if (device := self.data.get(device_id)) is not None and done(device):
+                    return
+        finally:
+            # A newer command on the same charger may have replaced this task.
+            if self._follow_ups.get(device_id) is asyncio.current_task():
+                del self._follow_ups[device_id]

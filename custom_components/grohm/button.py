@@ -50,5 +50,7 @@ class GrohmForceChargeButton(GrohmEntity, ButtonEntity):
     async def async_press(self) -> None:
         """Start a forced charge."""
         await self.coordinator.async_command(
-            self.coordinator.client.force_charge(self.device_id)
+            self.coordinator.client.force_charge(self.device_id),
+            self.device_id,
+            lambda device: device.force_charge,
         )

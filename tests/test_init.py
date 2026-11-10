@@ -11,9 +11,10 @@ import pytest
 
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import STATE_UNAVAILABLE
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Event, EventStateChangedData, HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.event import async_track_state_change_event
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
@@ -21,7 +22,7 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.grohm.const import DOMAIN
 
-from .conftest import FakeGrohmCloud, device_payload, setup_integration
+from .conftest import FakeGrohmCloud, call, device_payload, setup_integration
 
 
 async def test_private_account(
@@ -59,13 +60,9 @@ async def test_lock(
     hass: HomeAssistant, cloud: FakeGrohmCloud, config_entry: MockConfigEntry
 ) -> None:
     await setup_integration(hass, config_entry)
-    await hass.services.async_call(
-        "lock", "lock", {"entity_id": "lock.garage"}, blocking=True
-    )
+    await call(hass, "lock", "lock", "lock.garage")
     assert hass.states.get("lock.garage").state == "locked"
-    await hass.services.async_call(
-        "lock", "unlock", {"entity_id": "lock.garage"}, blocking=True
-    )
+    await call(hass, "lock", "unlock", "lock.garage")
     assert hass.states.get("lock.garage").state == "unlocked"
 
 
@@ -75,31 +72,119 @@ async def test_pause_and_resume(
     await setup_integration(hass, config_entry)
     entity_id = "switch.garage_charging"
 
-    await hass.services.async_call(
-        "switch", "turn_off", {"entity_id": entity_id}, blocking=True
-    )
-    assert cloud.operations[-2] == (
+    await call(hass, "switch", "turn_off", entity_id)
+    assert (
         "ChangeDeviceStatus",
         {"deviceId": "1", "status": "PAUSED"},
-    )
+    ) in cloud.operations
     assert hass.states.get(entity_id).state == "off"
     assert hass.states.get("sensor.garage_power").state == "0.0"
 
     # Turning off again does nothing.
     count = len(cloud.operations)
+    await call(hass, "switch", "turn_off", entity_id)
+    assert len(cloud.operations) == count
+
+    await call(hass, "switch", "turn_on", entity_id)
+    assert (
+        "ChangeDeviceStatus",
+        {"deviceId": "1", "status": "RUNNING"},
+    ) in cloud.operations
+    assert hass.states.get(entity_id).state == "on"
+
+
+async def test_resume_from_waiting(
+    hass: HomeAssistant, cloud: FakeGrohmCloud, config_entry: MockConfigEntry
+) -> None:
+    cloud.devices["1"]["currentSession"]["status"] = "WAITING"
+    await setup_integration(hass, config_entry)
+    await call(hass, "switch", "turn_on", "switch.garage_charging")
+    assert (
+        "ChangeDeviceStatus",
+        {"deviceId": "1", "status": "RESUMED"},
+    ) in cloud.operations
+    assert hass.states.get("switch.garage_charging").state == "on"
+
+
+async def test_slow_pause_does_not_flip_back(
+    hass: HomeAssistant, cloud: FakeGrohmCloud, config_entry: MockConfigEntry
+) -> None:
+    """The switch stays off while the charger takes a while to pause."""
+    await setup_integration(hass, config_entry)
+    entity_id = "switch.garage_charging"
+    cloud.command_delay = 3
+    states: list[str] = []
+
+    def _record(event: Event[EventStateChangedData]) -> None:
+        if event.data["new_state"] is not None:
+            states.append(event.data["new_state"].state)
+
+    async_track_state_change_event(hass, entity_id, _record)
     await hass.services.async_call(
         "switch", "turn_off", {"entity_id": entity_id}, blocking=True
     )
-    assert len(cloud.operations) == count
+    # Off right away, before the charger confirms it.
+    assert hass.states.get(entity_id).state == "off"
+    assert cloud.devices["1"]["currentSession"]["status"] == "CHARGING"
 
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert cloud.devices["1"]["currentSession"]["status"] == "PAUSED"
+    assert hass.states.get(entity_id).state == "off"
+    assert set(states) == {"off"}
+    assert ("NotifyViewing", {"id": "1"}) in cloud.operations
+    assert [op for op, _ in cloud.operations].count("Devices") >= 4
+
+
+async def test_command_not_confirmed(
+    hass: HomeAssistant, cloud: FakeGrohmCloud, config_entry: MockConfigEntry
+) -> None:
+    """The real state comes back when the charger never confirms."""
+    await setup_integration(hass, config_entry)
+    cloud.command_delay = 10_000
+    with (
+        patch("custom_components.grohm.coordinator.COMMAND_TIMEOUT", 0.05),
+        patch("custom_components.grohm.entity.COMMAND_TIMEOUT", 0.05),
+        patch("custom_components.grohm.coordinator.COMMAND_POLL_INTERVAL", 0.01),
+    ):
+        await hass.services.async_call(
+            "lock", "lock", {"entity_id": "lock.garage"}, blocking=True
+        )
+        assert hass.states.get("lock.garage").state == "locked"
+        await hass.async_block_till_done(wait_background_tasks=True)
+    assert hass.states.get("lock.garage").state == "unlocked"
+
+
+async def test_new_command_replaces_follow_up(
+    hass: HomeAssistant, cloud: FakeGrohmCloud, config_entry: MockConfigEntry
+) -> None:
+    await setup_integration(hass, config_entry)
+    cloud.command_delay = 2
+    for service in ("lock", "unlock"):
+        await hass.services.async_call(
+            "lock", service, {"entity_id": "lock.garage"}, blocking=True
+        )
+    assert hass.states.get("lock.garage").state == "unlocked"
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert hass.states.get("lock.garage").state == "unlocked"
+    assert config_entry.runtime_data._follow_ups == {}
+
+
+async def test_turn_on_while_pause_pending(
+    hass: HomeAssistant, cloud: FakeGrohmCloud, config_entry: MockConfigEntry
+) -> None:
+    await setup_integration(hass, config_entry)
+    cloud.command_delay = 10_000
+    entity_id = "switch.garage_charging"
+    await hass.services.async_call(
+        "switch", "turn_off", {"entity_id": entity_id}, blocking=True
+    )
+    assert hass.states.get(entity_id).state == "off"
+    # Still charging for the cloud: nothing to send, the real state is shown.
     await hass.services.async_call(
         "switch", "turn_on", {"entity_id": entity_id}, blocking=True
     )
-    assert cloud.operations[-2] == (
-        "ChangeDeviceStatus",
-        {"deviceId": "1", "status": "RUNNING"},
-    )
     assert hass.states.get(entity_id).state == "on"
+    assert await hass.config_entries.async_unload(config_entry.entry_id)
 
 
 async def test_switch_unavailable_without_car(
@@ -129,9 +214,7 @@ async def test_manager_account(
 
     assert hass.states.get("button.garage_force_charge").state == STATE_UNAVAILABLE
     assert hass.states.get("button.parking_force_charge").state == "unknown"
-    await hass.services.async_call(
-        "button", "press", {"entity_id": "button.parking_force_charge"}, blocking=True
-    )
+    await call(hass, "button", "press", "button.parking_force_charge")
     assert cloud.devices["3"]["forceCharge"] is True
     assert hass.states.get("binary_sensor.parking_forced_charge").state == "on"
     assert hass.states.get("button.parking_force_charge").state == STATE_UNAVAILABLE

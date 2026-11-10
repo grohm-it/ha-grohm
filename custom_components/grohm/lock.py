@@ -36,16 +36,20 @@ class GrohmLock(GrohmEntity, LockEntity):
     @property
     def is_locked(self) -> bool | None:
         """Return whether the charger is locked."""
-        return self.device.locked if self.device else None
+        return self._with_optimistic(self.device.locked if self.device else None)
+
+    async def _set_locked(self, locked: bool) -> None:
+        await self.coordinator.async_command(
+            self.coordinator.client.set_locked(self.device_id, locked),
+            self.device_id,
+            lambda device: device.locked is locked,
+        )
+        self._set_optimistic(locked)
 
     async def async_lock(self, **kwargs: Any) -> None:
         """Lock the charger."""
-        await self.coordinator.async_command(
-            self.coordinator.client.set_locked(self.device_id, True)
-        )
+        await self._set_locked(True)
 
     async def async_unlock(self, **kwargs: Any) -> None:
         """Unlock the charger."""
-        await self.coordinator.async_command(
-            self.coordinator.client.set_locked(self.device_id, False)
-        )
+        await self._set_locked(False)
