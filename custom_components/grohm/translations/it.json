@@ -1,0 +1,138 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Account Grohm",
+        "description": "Accedi con le stesse credenziali dell'app my-Grohm. Sono supportati solo gli account privato e gestore.",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        },
+        "data_description": {
+          "email": "Indirizzo email del tuo account my-Grohm.",
+          "password": "Password del tuo account my-Grohm."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Accedi di nuovo",
+        "description": "La sessione di {email} è scaduta o la password è cambiata. Inserisci di nuovo la password.",
+        "data": {
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Email o password non validi.",
+      "cannot_connect": "Impossibile raggiungere il server Grohm. Riprova più tardi.",
+      "installer_not_allowed": "Gli account installatore non sono supportati. Usa l'account del proprietario della wallbox (privato o gestore).",
+      "account_type_missing": "Questo account non ha ancora un tipo di account. Apri una volta l'app my-Grohm per completare la configurazione e riprova.",
+      "unknown": "Errore inatteso."
+    },
+    "abort": {
+      "already_configured": "Questo account Grohm è già configurato.",
+      "reauth_successful": "Accesso effettuato di nuovo.",
+      "wrong_account": "Le credenziali appartengono a un altro account Grohm."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opzioni Grohm",
+        "data": {
+          "scan_interval": "Intervallo di aggiornamento"
+        },
+        "data_description": {
+          "scan_interval": "Ogni quanti secondi leggere lo stato delle wallbox dal cloud Grohm."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Stato",
+        "state": {
+          "ready": "Pronta",
+          "charging": "In carica",
+          "finished": "Finita",
+          "paused": "In pausa",
+          "waiting": "In attesa",
+          "unknown": "Sconosciuto"
+        }
+      },
+      "power": {
+        "name": "Potenza"
+      },
+      "session_energy": {
+        "name": "Energia sessione"
+      },
+      "total_energy": {
+        "name": "Energia totale"
+      },
+      "current": {
+        "name": "Corrente auto"
+      },
+      "max_current": {
+        "name": "Corrente massima"
+      },
+      "voltage": {
+        "name": "Tensione"
+      },
+      "charge_duration": {
+        "name": "Durata ricarica"
+      },
+      "session_start": {
+        "name": "Inizio sessione"
+      },
+      "charging_phases": {
+        "name": "Fasi in uso"
+      },
+      "wifi_signal": {
+        "name": "Segnale Wi-Fi"
+      },
+      "nominal_power": {
+        "name": "Potenza nominale"
+      },
+      "energy_price": {
+        "name": "Tariffa energia"
+      }
+    },
+    "binary_sensor": {
+      "charging": {
+        "name": "In carica"
+      },
+      "force_charge": {
+        "name": "Ricarica forzata attiva"
+      }
+    },
+    "lock": {
+      "lock": {
+        "name": "Blocco"
+      }
+    },
+    "switch": {
+      "charging": {
+        "name": "Ricarica"
+      }
+    },
+    "button": {
+      "force_charge": {
+        "name": "Forza ricarica"
+      }
+    }
+  },
+  "exceptions": {
+    "auth_failed": {
+      "message": "Autenticazione Grohm non riuscita: accedi di nuovo."
+    },
+    "unsupported_account": {
+      "message": "Tipo di account Grohm non supportato (gli account installatore non possono essere usati)."
+    },
+    "update_failed": {
+      "message": "Errore durante l'aggiornamento dei dati Grohm: {error}"
+    },
+    "command_failed": {
+      "message": "Il comando alla wallbox Grohm non è riuscito: {error}"
+    }
+  }
+}
