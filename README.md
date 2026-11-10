@@ -6,6 +6,7 @@ Grohm cloud with the account of the my-Grohm app.
 
 <!-- ha-marketplace:exclude-start -->
 [![Release](https://img.shields.io/github/v/release/grohm-it/ha-grohm)](https://github.com/grohm-it/ha-grohm/releases)
+[![Downloads](https://img.shields.io/github/downloads/grohm-it/ha-grohm/total?label=downloads)](https://github.com/grohm-it/ha-grohm/releases)
 [![Active installations](https://img.shields.io/badge/dynamic/json?label=active%20installations&query=%24.grohm.total&url=https%3A%2F%2Fanalytics.home-assistant.io%2Fcustom_integrations.json)](https://analytics.home-assistant.io/)
 [![Validation](https://github.com/grohm-it/ha-grohm/actions/workflows/validate.yml/badge.svg)](https://github.com/grohm-it/ha-grohm/actions/workflows/validate.yml)
 
