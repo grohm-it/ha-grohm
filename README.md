@@ -1,10 +1,12 @@
 # Grohm for Home Assistant
 
-The official Home Assistant integration for [Grohm](https://grohm.it) EV
-chargers, made by Emme Esse S.p.A., the maker of Grohm. It connects to the
+The official Grohm integration for Home Assistant, for [Grohm](https://grohm.it)
+EV chargers, made by Emme Esse S.p.A., the maker of Grohm. It connects to the
 Grohm cloud with the account of the my-Grohm app.
 
+<!-- ha-marketplace:exclude-start -->
 [![Open your Home Assistant instance and open this repository in the Marketplace.](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=grohm-it&repository=ha-grohm&category=integration)
+<!-- ha-marketplace:exclude-end -->
 
 ## Supported accounts
 
@@ -14,13 +16,19 @@ Grohm cloud with the account of the my-Grohm app.
 - **Installer** accounts are not supported: they only have read-only access
   to the chargers of their customers. Sign in with the account of the owner.
 
+<!-- ha-marketplace:exclude-start -->
 ## Installation
 
-1. In Home Assistant, open **Settings > Marketplace**, search for **Grohm**
-   and install it. Or use the button above.
-2. Open **Settings > Devices & services > Add integration** and pick
+Use the button above, or in Home Assistant open **Settings > Marketplace**,
+add `https://github.com/grohm-it/ha-grohm` as a custom repository of type
+*Integration*, and install **Grohm**. Restart Home Assistant if it asks.
+<!-- ha-marketplace:exclude-end -->
+
+## Setup
+
+1. Open **Settings > Devices & services > Add integration** and pick
    **Grohm**.
-3. Enter the email address and password of your my-Grohm account.
+2. Enter the email address and password of your my-Grohm account.
 
 To remove it, delete the entry in **Settings > Devices & services**, then
 uninstall it from the Marketplace.
