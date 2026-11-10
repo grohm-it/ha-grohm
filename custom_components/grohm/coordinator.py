@@ -1,11 +1,18 @@
-"""Coordinator: un'unica richiesta periodica per tutte le wallbox."""
+"""Coordinator that reads all chargers of an account in one request."""
 
 from __future__ import annotations
 
 import asyncio
-import logging
-from datetime import datetime, timedelta
-from typing import Any
+from collections.abc import Awaitable
+from datetime import datetime
+
+from grohm import (
+    AccountType,
+    Device,
+    GrohmAuthenticationError,
+    GrohmClient,
+    GrohmError,
+)
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -17,59 +24,63 @@ from homeassistant.exceptions import (
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .api import GrohmApi, GrohmAuthError, GrohmError, GrohmUnsupportedAccountError
 from .const import (
     COMMAND_REFRESH_DELAY,
-    CONF_SCAN_INTERVAL,
-    DEFAULT_SCAN_INTERVAL,
     DISCOVERY_INTERVAL,
     DOMAIN,
+    LOGGER,
+    SCAN_INTERVAL,
+    SUPPORTED_ACCOUNT_TYPES,
 )
-
-_LOGGER = logging.getLogger(__name__)
 
 type GrohmConfigEntry = ConfigEntry[GrohmCoordinator]
 
 
-class GrohmCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
-    """Dati: id wallbox → device (con currentSession)."""
+class GrohmCoordinator(DataUpdateCoordinator[dict[str, Device]]):
+    """Charger ID to charger, for every charger of the account."""
 
     config_entry: GrohmConfigEntry
 
     def __init__(
-        self, hass: HomeAssistant, entry: GrohmConfigEntry, api: GrohmApi
+        self, hass: HomeAssistant, entry: GrohmConfigEntry, client: GrohmClient
     ) -> None:
-        interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+        """Initialize the coordinator."""
         super().__init__(
             hass,
-            _LOGGER,
+            LOGGER,
             config_entry=entry,
             name=DOMAIN,
-            update_interval=timedelta(seconds=interval),
+            update_interval=SCAN_INTERVAL,
         )
-        self.api = api
+        self.client = client
         self.device_ids: list[str] = []
         self._last_discovery: datetime | None = None
 
     @property
-    def is_gestore(self) -> bool:
-        return self.api.user is not None and self.api.user.is_gestore
+    def is_manager(self) -> bool:
+        """Whether the account is a fleet manager account."""
+        user = self.client.user
+        return user is not None and user.account_type is AccountType.MANAGER
 
-    async def _async_update_data(self) -> dict[str, dict[str, Any]]:
+    async def _async_update_data(self) -> dict[str, Device]:
+        """Fetch the state of all chargers."""
         try:
             now = dt_util.utcnow()
             if (
                 self._last_discovery is None
                 or now - self._last_discovery >= DISCOVERY_INTERVAL
             ):
-                self.device_ids = await self.api.device_ids()
+                # Also renews the session, and checks the account type.
+                user = await self.client.get_user()
+                if user.account_type not in SUPPORTED_ACCOUNT_TYPES:
+                    raise ConfigEntryError(
+                        translation_domain=DOMAIN,
+                        translation_key="unsupported_account",
+                    )
+                self.device_ids = await self.client.get_device_ids()
                 self._last_discovery = now
-            return await self.api.devices(self.device_ids)
-        except GrohmUnsupportedAccountError as err:
-            raise ConfigEntryError(
-                translation_domain=DOMAIN, translation_key="unsupported_account"
-            ) from err
-        except GrohmAuthError as err:
+            return await self.client.get_devices(self.device_ids)
+        except GrohmAuthenticationError as err:
             raise ConfigEntryAuthFailed(
                 translation_domain=DOMAIN, translation_key="auth_failed"
             ) from err
@@ -80,10 +91,10 @@ class GrohmCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 translation_placeholders={"error": str(err)},
             ) from err
 
-    async def async_command(self, coro) -> None:
-        """Esegue un comando verso la wallbox e rilegge lo stato poco dopo."""
+    async def async_command(self, command: Awaitable[None]) -> None:
+        """Send a command to a charger, then read the new state."""
         try:
-            await coro
+            await command
         except GrohmError as err:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,

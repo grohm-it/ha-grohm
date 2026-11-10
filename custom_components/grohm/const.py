@@ -1,17 +1,20 @@
-"""Costanti dell'integrazione Grohm."""
+"""Constants for the Grohm integration."""
 
 from datetime import timedelta
+import logging
+
+from grohm import AccountType
 
 DOMAIN = "grohm"
-MANUFACTURER = "Grohm"
+LOGGER = logging.getLogger(__package__)
 
-CONF_SCAN_INTERVAL = "scan_interval"
-DEFAULT_SCAN_INTERVAL = 30  # secondi
-MIN_SCAN_INTERVAL = 10
-MAX_SCAN_INTERVAL = 600
-
-# Ogni quanto ricontrollare l'elenco delle wallbox (nuove/rimosse).
+# The cloud gets fresh data from the chargers every few seconds while charging.
+SCAN_INTERVAL = timedelta(seconds=30)
+# How often to look for chargers that were added to or removed from the account.
 DISCOVERY_INTERVAL = timedelta(minutes=10)
-
-# Dopo un comando la wallbox impiega qualche secondo a riportare lo stato.
+# Chargers take a few seconds to report the result of a command.
 COMMAND_REFRESH_DELAY = 3
+
+# Installers only have read-only access to the chargers of their customers,
+# so they are not supported.
+SUPPORTED_ACCOUNT_TYPES = (AccountType.PRIVATE, AccountType.MANAGER)

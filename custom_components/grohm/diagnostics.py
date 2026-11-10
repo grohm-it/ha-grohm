@@ -1,7 +1,8 @@
-"""Diagnostica (dati scaricabili dalla pagina dell'integrazione)."""
+"""Diagnostics of the Grohm integration."""
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Any
 
 from homeassistant.components.diagnostics import async_redact_data
@@ -10,20 +11,20 @@ from homeassistant.core import HomeAssistant
 
 from .coordinator import GrohmConfigEntry
 
-TO_REDACT = {CONF_EMAIL, CONF_PASSWORD, "serialNumber", "name", "id"}
+TO_REDACT = {CONF_EMAIL, CONF_PASSWORD, "id", "name", "serial_number"}
 
 
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: GrohmConfigEntry
 ) -> dict[str, Any]:
+    """Return diagnostics for a config entry."""
     coordinator = entry.runtime_data
-    user = coordinator.api.user
+    user = coordinator.client.user
     return {
         "entry": async_redact_data(dict(entry.data), TO_REDACT),
-        "options": dict(entry.options),
         "account_type": user.account_type if user else None,
         "devices": [
-            async_redact_data(device, TO_REDACT)
-            for device in (coordinator.data or {}).values()
+            async_redact_data(asdict(device), TO_REDACT)
+            for device in coordinator.data.values()
         ],
     }

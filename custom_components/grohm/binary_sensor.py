@@ -1,10 +1,11 @@
-"""Sensori binari delle wallbox Grohm."""
+"""Binary sensors of Grohm chargers."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+
+from grohm import ChargerStatus, Device
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -13,37 +14,49 @@ from homeassistant.components.binary_sensor import (
 )
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .api import STATUS_CHARGING
 from .coordinator import GrohmConfigEntry, GrohmCoordinator
-from .entity import GrohmEntity, add_entities_for_new_devices
+from .entity import GrohmEntity, async_add_device_entities
+
+PARALLEL_UPDATES = 0
 
 
 @dataclass(frozen=True, kw_only=True)
-class GrohmBinaryDescription(BinarySensorEntityDescription):
-    value_fn: Callable[[dict[str, Any], dict[str, Any]], bool | None]
+class GrohmBinarySensorEntityDescription(BinarySensorEntityDescription):
+    """Describes a Grohm binary sensor."""
+
+    value_fn: Callable[[Device], bool | None]
     available_when_offline: bool = False
+    managers_only: bool = False
 
 
-BINARY_SENSORS: tuple[GrohmBinaryDescription, ...] = (
-    GrohmBinaryDescription(
+BINARY_SENSORS: tuple[GrohmBinarySensorEntityDescription, ...] = (
+    GrohmBinarySensorEntityDescription(
         key="connected",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         entity_category=EntityCategory.DIAGNOSTIC,
         available_when_offline=True,
-        value_fn=lambda d, s: d.get("isConnected") is True,
+        value_fn=lambda device: device.is_connected,
     ),
-    GrohmBinaryDescription(
+    GrohmBinarySensorEntityDescription(
         key="charging",
-        translation_key="charging",
         device_class=BinarySensorDeviceClass.BATTERY_CHARGING,
-        value_fn=lambda d, s: s.get("status") == STATUS_CHARGING,
+        value_fn=lambda device: device.status is ChargerStatus.CHARGING,
     ),
-    GrohmBinaryDescription(
+    GrohmBinarySensorEntityDescription(
+        key="car_connected",
+        translation_key="car_connected",
+        device_class=BinarySensorDeviceClass.PLUG,
+        value_fn=lambda device: (
+            device.session.car_connected if device.session else None
+        ),
+    ),
+    GrohmBinarySensorEntityDescription(
         key="force_charge",
         translation_key="force_charge",
-        value_fn=lambda d, s: d.get("forceCharge") is True,
+        managers_only=True,
+        value_fn=lambda device: device.force_charge,
     ),
 )
 
@@ -51,35 +64,38 @@ BINARY_SENSORS: tuple[GrohmBinaryDescription, ...] = (
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: GrohmConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    coordinator = entry.runtime_data
-    add_entities_for_new_devices(
-        coordinator,
+    """Set up the binary sensors."""
+    async_add_device_entities(
         entry,
         async_add_entities,
-        lambda device_id, _: [
-            GrohmBinarySensor(coordinator, device_id, desc)
-            for desc in BINARY_SENSORS
-            # la ricarica forzata è una funzione del solo gestore
-            if desc.key != "force_charge" or coordinator.is_gestore
-        ],
+        lambda coordinator, device: (
+            GrohmBinarySensor(coordinator, device.id, description)
+            for description in BINARY_SENSORS
+            if coordinator.is_manager or not description.managers_only
+        ),
     )
 
 
 class GrohmBinarySensor(GrohmEntity, BinarySensorEntity):
-    entity_description: GrohmBinaryDescription
+    """A binary sensor of a charger."""
+
+    entity_description: GrohmBinarySensorEntityDescription
 
     def __init__(
         self,
         coordinator: GrohmCoordinator,
         device_id: str,
-        description: GrohmBinaryDescription,
+        description: GrohmBinarySensorEntityDescription,
     ) -> None:
+        """Initialize the binary sensor."""
         super().__init__(coordinator, device_id, description.key)
         self.entity_description = description
-        self._available_when_offline = description.available_when_offline
+        self.available_when_offline = description.available_when_offline
 
     @property
     def is_on(self) -> bool | None:
-        return self.entity_description.value_fn(self.device, self.session)
+        """Return the state of the binary sensor."""
+        device = self.device
+        return self.entity_description.value_fn(device) if device else None

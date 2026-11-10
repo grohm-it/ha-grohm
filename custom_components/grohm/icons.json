@@ -1,0 +1,57 @@
+{
+  "entity": {
+    "sensor": {
+      "status": {
+        "default": "mdi:ev-station",
+        "state": {
+          "charging": "mdi:battery-charging",
+          "paused": "mdi:pause-circle",
+          "waiting": "mdi:timer-sand",
+          "finished": "mdi:check-circle",
+          "ready": "mdi:ev-plug-type2"
+        }
+      },
+      "charging_phases": {
+        "default": "mdi:sine-wave"
+      },
+      "energy_price": {
+        "default": "mdi:currency-eur"
+      },
+      "session_start": {
+        "default": "mdi:clock-start"
+      },
+      "charge_duration": {
+        "default": "mdi:timer-outline"
+      }
+    },
+    "binary_sensor": {
+      "force_charge": {
+        "default": "mdi:flash-alert",
+        "state": {
+          "off": "mdi:flash-off"
+        }
+      }
+    },
+    "switch": {
+      "charging": {
+        "default": "mdi:ev-station",
+        "state": {
+          "off": "mdi:pause"
+        }
+      }
+    },
+    "lock": {
+      "charger": {
+        "default": "mdi:lock-open-variant",
+        "state": {
+          "locked": "mdi:lock"
+        }
+      }
+    },
+    "button": {
+      "force_charge": {
+        "default": "mdi:flash"
+      }
+    }
+  }
+}

@@ -1,106 +1,91 @@
-"""Configurazione da interfaccia: login con le credenziali dell'app my-Grohm.
+"""Config flow of the Grohm integration.
 
-Sono ammessi solo gli account *privato* e *gestore*: gli *installatori*
-vengono rifiutati (vedono solo dispositivi di altri e in sola lettura).
+Only private and fleet manager accounts are accepted. Installer accounts are
+refused: they only have read-only access to the chargers of their customers.
 """
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Mapping
 from typing import Any
 
-import voluptuous as vol
-from homeassistant.config_entries import (
-    ConfigFlow,
-    ConfigFlowResult,
-    OptionsFlow,
+from aiohttp import ClientSession
+from grohm import (
+    AccountType,
+    GrohmAuthenticationError,
+    GrohmClient,
+    GrohmConnectionError,
+    GrohmError,
+    User,
 )
+import voluptuous as vol
+
+from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
-from homeassistant.core import callback
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.selector import (
-    NumberSelector,
-    NumberSelectorConfig,
-    NumberSelectorMode,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
 )
-from homeassistant.util.ssl import get_default_context
 
-from .api import (
-    ACCOUNT_INSTALLATORE,
-    GrohmApi,
-    GrohmAuthError,
-    GrohmConnectionError,
-    GrohmError,
-    GrohmUnsupportedAccountError,
-    GrohmUser,
-    create_session,
+from .const import DOMAIN, LOGGER, SUPPORTED_ACCOUNT_TYPES
+
+EMAIL_SELECTOR = TextSelector(
+    TextSelectorConfig(type=TextSelectorType.EMAIL, autocomplete="username")
 )
-from .const import (
-    CONF_SCAN_INTERVAL,
-    DEFAULT_SCAN_INTERVAL,
-    DOMAIN,
-    MAX_SCAN_INTERVAL,
-    MIN_SCAN_INTERVAL,
+PASSWORD_SELECTOR = TextSelector(
+    TextSelectorConfig(type=TextSelectorType.PASSWORD, autocomplete="current-password")
 )
-
-_LOGGER = logging.getLogger(__name__)
-
 USER_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_EMAIL): TextSelector(
-            TextSelectorConfig(type=TextSelectorType.EMAIL, autocomplete="username")
-        ),
-        vol.Required(CONF_PASSWORD): TextSelector(
-            TextSelectorConfig(
-                type=TextSelectorType.PASSWORD, autocomplete="current-password"
-            )
-        ),
+        vol.Required(CONF_EMAIL): EMAIL_SELECTOR,
+        vol.Required(CONF_PASSWORD): PASSWORD_SELECTOR,
     }
 )
+REAUTH_SCHEMA = vol.Schema({vol.Required(CONF_PASSWORD): PASSWORD_SELECTOR})
 
 
 class GrohmConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Flusso di configurazione Grohm."""
+    """Handle a config flow for Grohm."""
 
     VERSION = 1
 
-    async def _try_login(
+    _session: ClientSession | None = None
+
+    async def _async_validate(
         self, email: str, password: str
-    ) -> tuple[GrohmUser | None, dict[str, str]]:
-        session = create_session(get_default_context())
-        api = GrohmApi(session, email, password)
+    ) -> tuple[User | None, dict[str, str]]:
+        """Log in, check the account type, and log out again."""
+        if self._session is None:
+            # A session of its own: the API uses a session cookie.
+            self._session = async_create_clientsession(self.hass)
+        client = GrohmClient(self._session, email, password)
         try:
-            user = await api.login()
-        except GrohmUnsupportedAccountError as err:
-            reason = (
-                "installer_not_allowed"
-                if err.account_type == ACCOUNT_INSTALLATORE
-                else "account_type_missing"
-            )
-            return None, {"base": reason}
-        except GrohmAuthError:
+            user = await client.login()
+        except GrohmAuthenticationError:
             return None, {"base": "invalid_auth"}
         except GrohmConnectionError:
             return None, {"base": "cannot_connect"}
         except GrohmError:
-            _LOGGER.exception("Errore inatteso durante il login Grohm")
+            LOGGER.exception("Unexpected error while logging in")
             return None, {"base": "unknown"}
-        finally:
-            # Il flusso serve solo a verificare: la sessione vera la apre l'integrazione.
-            await api.logout()
-            await session.close()
+        # The flow only checks the credentials: the entry opens its own session.
+        await client.logout()
+        if user.account_type is AccountType.INSTALLER:
+            return None, {"base": "installer_not_supported"}
+        if user.account_type not in SUPPORTED_ACCOUNT_TYPES:
+            return None, {"base": "account_type_missing"}
         return user, {}
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Ask for the credentials of the Grohm account."""
         errors: dict[str, str] = {}
         if user_input is not None:
             email = user_input[CONF_EMAIL].strip().lower()
-            user, errors = await self._try_login(email, user_input[CONF_PASSWORD])
+            user, errors = await self._async_validate(email, user_input[CONF_PASSWORD])
             if user is not None:
                 await self.async_set_unique_id(user.id)
                 self._abort_if_unique_id_configured()
@@ -117,64 +102,28 @@ class GrohmConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_reauth(
         self, entry_data: Mapping[str, Any]
     ) -> ConfigFlowResult:
+        """Start reauthentication when the password was rejected."""
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Ask for the new password."""
         entry = self._get_reauth_entry()
         errors: dict[str, str] = {}
         if user_input is not None:
-            email = entry.data[CONF_EMAIL]
-            user, errors = await self._try_login(email, user_input[CONF_PASSWORD])
+            user, errors = await self._async_validate(
+                entry.data[CONF_EMAIL], user_input[CONF_PASSWORD]
+            )
             if user is not None:
                 await self.async_set_unique_id(user.id)
                 self._abort_if_unique_id_mismatch(reason="wrong_account")
                 return self.async_update_reload_and_abort(
-                    entry,
-                    data_updates={CONF_PASSWORD: user_input[CONF_PASSWORD]},
+                    entry, data_updates={CONF_PASSWORD: user_input[CONF_PASSWORD]}
                 )
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=vol.Schema(
-                {vol.Required(CONF_PASSWORD): USER_SCHEMA.schema[CONF_PASSWORD]}
-            ),
+            data_schema=REAUTH_SCHEMA,
             description_placeholders={"email": entry.data[CONF_EMAIL]},
             errors=errors,
-        )
-
-    @staticmethod
-    @callback
-    def async_get_options_flow(config_entry) -> GrohmOptionsFlow:
-        return GrohmOptionsFlow()
-
-
-class GrohmOptionsFlow(OptionsFlow):
-    """Opzioni: intervallo di aggiornamento."""
-
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        if user_input is not None:
-            return self.async_create_entry(
-                data={CONF_SCAN_INTERVAL: int(user_input[CONF_SCAN_INTERVAL])}
-            )
-        current = self.config_entry.options.get(
-            CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
-        )
-        return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_SCAN_INTERVAL, default=current): NumberSelector(
-                        NumberSelectorConfig(
-                            min=MIN_SCAN_INTERVAL,
-                            max=MAX_SCAN_INTERVAL,
-                            step=1,
-                            unit_of_measurement="s",
-                            mode=NumberSelectorMode.BOX,
-                        )
-                    )
-                }
-            ),
         )

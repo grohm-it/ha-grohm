@@ -1,48 +1,54 @@
-"""Ricarica forzata (solo account gestore, come nell'app)."""
+"""Forced charge button, for fleet manager accounts like in the app."""
 
 from __future__ import annotations
 
+from grohm import ChargerStatus
+
 from homeassistant.components.button import ButtonEntity
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .api import STATUS_READY
 from .coordinator import GrohmConfigEntry
-from .entity import GrohmEntity, add_entities_for_new_devices
+from .entity import GrohmEntity, async_add_device_entities
+
+PARALLEL_UPDATES = 1
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: GrohmConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    coordinator = entry.runtime_data
-    if not coordinator.is_gestore:
+    """Set up the forced charge buttons."""
+    if not entry.runtime_data.is_manager:
         return
-    add_entities_for_new_devices(
-        coordinator,
+    async_add_device_entities(
         entry,
         async_add_entities,
-        lambda device_id, _: [
-            GrohmForceChargeButton(coordinator, device_id, "force_charge_button")
+        lambda coordinator, device: [
+            GrohmForceChargeButton(coordinator, device.id, "force_charge_button")
         ],
     )
 
 
 class GrohmForceChargeButton(GrohmEntity, ButtonEntity):
-    """Avvia una ricarica senza tessera. La wallbox la tiene attiva per 300 s."""
+    """Starts charging without an RFID card. Lasts 300 seconds."""
 
     _attr_translation_key = "force_charge"
 
     @property
     def available(self) -> bool:
+        """Available while the charger is ready and not forced already."""
+        device = self.device
         return (
             super().available
-            and self.session.get("status") == STATUS_READY
-            and self.device.get("forceCharge") is not True
+            and device is not None
+            and device.status is ChargerStatus.READY
+            and not device.force_charge
         )
 
     async def async_press(self) -> None:
+        """Start a forced charge."""
         await self.coordinator.async_command(
-            self.coordinator.api.force_charge(self.device_id)
+            self.coordinator.client.force_charge(self.device_id)
         )

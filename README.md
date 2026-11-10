@@ -1,115 +1,80 @@
-# Grohm per Home Assistant
+# Grohm for Home Assistant
 
-Integrazione ufficiale **Grohm** (sviluppata da Emme Esse S.p.A., produttore
-delle wallbox Grohm) che porta in Home Assistant le wallbox Grohm associate a un account **my-Grohm**, usando lo stesso backend
-GraphQL dell'app (`https://api.grohm.it/graphql`).
+The official Home Assistant integration for [Grohm](https://grohm.it) EV
+chargers, made by Emme Esse S.p.A., the maker of Grohm. It connects to the
+Grohm cloud with the account of the my-Grohm app.
 
-> Nota: in Home Assistant gli "add-on" sono container del Supervisor; per
-> creare dispositivi ed entità serve invece un'**integrazione**, che è ciò che
-> trovi qui. Funziona su qualunque installazione (OS, Container, Core).
+[![Open your Home Assistant instance and open this repository in the Marketplace.](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=grohm&repository=ha-grohm&category=integration)
 
-## Cosa espone
+## Supported accounts
 
-Solo le **wallbox fisiche**: ogni wallbox è un dispositivo in HA. Le **reti**
-del gestore non vengono create: servono solo a scoprire le wallbox (quelle di
-tutte le reti più quelle non assegnate a nessuna rete).
+- **Private** accounts: all chargers of the account.
+- **Fleet manager** accounts: the chargers of all networks, and the ones not
+  in a network. Networks themselves are not added to Home Assistant.
+- **Installer** accounts are not supported: they only have read-only access
+  to the chargers of their customers. Sign in with the account of the owner.
 
-| Entità | Tipo | Note |
-|---|---|---|
-| Stato | sensore (enum) | Pronta / In carica / In pausa / In attesa / Finita |
-| Potenza | sensore W→kW | campo `energyCar`; 0 se non in carica (come l'app) |
-| Energia sessione | sensore kWh | `wattHoursCharged` della sessione corrente |
-| Energia totale | sensore kWh | `totalKwhCharged`, adatto alla dashboard Energia |
-| Corrente auto / Corrente massima | sensore A | |
-| Tensione | sensore V | il backend la dà in millivolt (stringa) |
-| Durata ricarica, Inizio sessione | sensori | inizio sessione disattivato di default |
-| Fasi in uso | sensore | solo wallbox trifase, durante la ricarica |
-| Segnale Wi-Fi, Potenza nominale, Tariffa energia | diagnostica | |
-| Connettività, In carica | sensori binari | |
-| Blocco | lock | blocca/sblocca la wallbox (`editDevice.locked`) |
-| Ricarica | switch | spento = pausa, acceso = riprendi; disponibile solo con auto collegata (In carica / In pausa / In attesa) |
-| Forza ricarica + Ricarica forzata attiva | pulsante + binario | **solo account gestore**, solo a wallbox Pronta; la wallbox la mantiene per 300 s |
+## Installation
 
-Le entità di una wallbox offline diventano *non disponibili*, tranne
-connettività, energia totale e dati di configurazione.
+1. In Home Assistant, open **Settings > Marketplace**, search for **Grohm**
+   and install it. Or use the button above.
+2. Open **Settings > Devices & services > Add integration** and pick
+   **Grohm**.
+3. Enter the email address and password of your my-Grohm account.
 
-## Account supportati
+To remove it, delete the entry in **Settings > Devices & services**, then
+uninstall it from the Marketplace.
 
-- **Privato** e **gestore**: sì.
-- **Installatore**: **no**. Il login viene rifiutato nella configurazione
-  (e la sessione appena aperta viene chiusa subito). Se un account già
-  configurato diventa installatore, l'integrazione smette di caricarsi.
-- Account senza tipo (creati dalla webapp e mai completati): rifiutati, finché
-  non si sceglie il tipo dall'app my-Grohm.
+## Entities
 
-## Installazione
+Each charger is a device, with these entities:
 
-**HACS** (repository personalizzato): aggiungi l'URL del repository come
-*Integration*, installa "Grohm" e riavvia Home Assistant.
+| Entity | Notes |
+|---|---|
+| Status | Ready, charging, paused, waiting, finished |
+| Power | 0 when not charging |
+| Session energy, total energy | Total energy works in the Energy dashboard |
+| Car current, maximum current, voltage | |
+| Charging time, session start | Session start is disabled by default |
+| Charging phases | Three phase chargers only, while charging |
+| Rated power, energy price, Wi-Fi signal | Diagnostic; Wi-Fi signal disabled by default |
+| Connectivity, charging, car | Binary sensors |
+| Lock | A locked charger does not charge |
+| Charging switch | Off pauses, on resumes. Available while a car is connected |
+| Force charge button, forced charge sensor | Fleet manager accounts only, while the charger is ready. Lasts 300 seconds |
 
-**Manuale**: copia `custom_components/grohm` nella cartella
-`config/custom_components/` di Home Assistant e riavvia.
+When a charger is offline, its entities become unavailable, except
+connectivity, total energy and the configuration values.
 
-Poi: *Impostazioni → Dispositivi e servizi → Aggiungi integrazione → Grohm* e inserisci email e password dell'app my-Grohm.
+## How it works
 
-Opzioni: intervallo di aggiornamento (default 30 s, min 10 s). L'elenco delle
-wallbox viene ricontrollato ogni 10 minuti: le nuove compaiono da sole.
+- The integration polls the Grohm cloud every 30 seconds, with one request
+  for all chargers. It looks for new chargers every 10 minutes and adds them
+  without a restart.
+- When the password changes, Home Assistant asks you to sign in again.
+- All communication goes through the [python-grohm](https://github.com/grohm/python-grohm)
+  library.
 
-## Come funziona
+## Known limitations
 
-- Autenticazione a **cookie di sessione** (come l'app): email e password sono
-  salvate nella config entry di HA e usate per rifare il login quando la
-  sessione scade (`me` torna `null` o il server risponde 401/403). Se la
-  password cambia, HA chiede di riautenticarsi.
-- Ogni integrazione usa una propria sessione HTTP con cookie jar separato.
-- Nessuna subscription nel backend: lo stato è letto in **polling**, con una
-  sola query GraphQL per tutte le wallbox (alias `d0`, `d1`, …).
-- Comandi: `changeDeviceStatus` con la stessa mappatura della webapp
-  (`CHARGING→PAUSED`, `PAUSED→RUNNING`, `WAITING→RESUMED`), `editDevice` per
-  blocco e ricarica forzata. Dopo ogni comando lo stato viene riletto dopo 3 s.
+- Cloud only: without internet, or when the Grohm cloud is down, the
+  entities are unavailable.
+- Schedules, RFID cards and networks are managed in the my-Grohm app.
 
-## Sviluppo e test
+## Development
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install -r requirements_test.txt
-.venv/bin/python -m pytest
+python -m venv .venv
+.venv/bin/pip install -r requirements_test.txt ruff
+.venv/bin/pytest --cov=custom_components.grohm
+.venv/bin/ruff check custom_components tests
 ```
 
-I test usano un backend GraphQL finto (`tests/conftest.py`): coprono login e
-rifiuto degli installatori, scoperta delle wallbox (privato e gestore),
-nuovo login a sessione scaduta, entità, comandi e riautenticazione.
+The goal is to contribute the integration to Home Assistant Core. It already
+follows the rules of the integration quality scale.
 
-## Verifiche sul backend reale
+## License
 
-Confrontato con lo schema di `api.grohm.it` (introspection) e con risposte vere:
-tutti i campi e le mutation usati esistono con i tipi attesi; senza sessione il
-server risponde HTTP 200 con `"User is not authenticated"` (o `me: null`),
-credenziali errate → `LoginError "Invalid email or password"`. Il flusso con
-un account reale (privato e gestore) resta da provare.
-
-## Pubblicazione
-
-L'integrazione è distribuita tramite il **Marketplace** di Home Assistant
-(integrato dalla 2026.11, ex HACS):
-
-1. repo pubblico su GitHub con descrizione, topic e issue attive;
-2. workflow `hassfest` e HACS verdi (in `.github/workflows/`), senza controlli
-   ignorati;
-3. una GitHub Release completa (non basta il tag) con versione uguale a
-   `version` del manifest;
-4. da subito installabile da link (badge My Home Assistant nel README);
-5. per comparire a tutti nel catalogo: PR a `hacs/default` aperta da un
-   account personale del proprietario del repo (la revisione richiede mesi).
-
-Le immagini del marchio stanno in `custom_components/grohm/brand/`
-(supportate da Home Assistant 2026.3).
-
-## Licenza
-
-Software proprietario di Emme Esse S.p.A., gratuito da usare con i prodotti
-Grohm e fornito senza garanzia: vedi [LICENSE](LICENSE). Con questa licenza
-l'integrazione non può entrare nel core di Home Assistant (che richiede codice
-Apache-2.0 e librerie con licenza OSI).
-
-Grohm è un marchio registrato di Emme Esse S.p.A. Questo progetto non è
-affiliato né approvato da Home Assistant o dalla Open Home Foundation.
+Apache License 2.0, see [LICENSE](LICENSE). Grohm is a registered trademark
+of Emme Esse S.p.A. This project is not affiliated with Home Assistant or the
+Open Home Foundation.

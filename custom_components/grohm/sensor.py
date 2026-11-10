@@ -1,11 +1,12 @@
-"""Sensori delle wallbox Grohm."""
+"""Sensors of Grohm chargers."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+
+from grohm import ChargerStatus, ChargingSession, Device
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -23,90 +24,60 @@ from homeassistant.const import (
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.util import dt as dt_util
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .api import (
-    KNOWN_STATUSES,
-    charging_phases,
-    is_three_phase,
-    nominal_kw,
-    power_w,
-    voltage_volts,
-)
 from .coordinator import GrohmConfigEntry, GrohmCoordinator
-from .entity import GrohmEntity, add_entities_for_new_devices
+from .entity import GrohmEntity, async_add_device_entities
 
-Device = dict[str, Any]
-Session = dict[str, Any]
+PARALLEL_UPDATES = 0
 
-
-def _num(value: Any) -> float | None:
-    try:
-        return None if value is None else float(value)
-    except (TypeError, ValueError):
-        return None
+type StateType = str | int | float | datetime | None
 
 
-def _status(device: Device, session: Session) -> str | None:
-    status = session.get("status")
-    if status is None:
-        return None
-    return status.lower() if status in KNOWN_STATUSES else "unknown"
-
-
-def _wh_to_kwh(device: Device, session: Session) -> float | None:
-    wh = _num(session.get("wattHoursCharged"))
-    return None if wh is None else round(wh / 1000, 3)
-
-
-def _timestamp(device: Device, session: Session) -> datetime | None:
-    raw = session.get("createdAt")
-    if not raw:
-        return None
-    parsed = dt_util.parse_datetime(str(raw))
-    if parsed is None:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=dt_util.UTC)
-    return parsed
+def _from_session(
+    getter: Callable[[ChargingSession], StateType],
+) -> Callable[[Device], StateType]:
+    """Read a value from the current session, None without a session."""
+    return lambda device: getter(device.session) if device.session else None
 
 
 @dataclass(frozen=True, kw_only=True)
-class GrohmSensorDescription(SensorEntityDescription):
-    value_fn: Callable[[Device, Session], Any]
-    available_when_offline: bool = False
+class GrohmSensorEntityDescription(SensorEntityDescription):
+    """Describes a Grohm sensor."""
+
+    value_fn: Callable[[Device], StateType]
     exists_fn: Callable[[Device], bool] = lambda _: True
+    available_when_offline: bool = False
 
 
-SENSORS: tuple[GrohmSensorDescription, ...] = (
-    GrohmSensorDescription(
+SENSORS: tuple[GrohmSensorEntityDescription, ...] = (
+    GrohmSensorEntityDescription(
         key="status",
         translation_key="status",
         device_class=SensorDeviceClass.ENUM,
-        options=[s.lower() for s in KNOWN_STATUSES] + ["unknown"],
-        value_fn=_status,
+        options=[status.lower() for status in ChargerStatus],
+        value_fn=lambda device: device.status.lower() if device.status else None,
     ),
-    GrohmSensorDescription(
+    GrohmSensorEntityDescription(
         key="power",
-        translation_key="power",
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfPower.WATT,
         suggested_unit_of_measurement=UnitOfPower.KILO_WATT,
         suggested_display_precision=2,
-        value_fn=lambda d, s: power_w(s),
+        value_fn=_from_session(lambda session: session.power),
     ),
-    GrohmSensorDescription(
+    GrohmSensorEntityDescription(
         key="session_energy",
         translation_key="session_energy",
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        suggested_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         suggested_display_precision=2,
-        value_fn=_wh_to_kwh,
+        value_fn=_from_session(lambda session: session.energy_wh),
     ),
-    GrohmSensorDescription(
+    GrohmSensorEntityDescription(
         key="total_energy",
         translation_key="total_energy",
         device_class=SensorDeviceClass.ENERGY,
@@ -114,81 +85,80 @@ SENSORS: tuple[GrohmSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         suggested_display_precision=2,
         available_when_offline=True,
-        value_fn=lambda d, s: _num(d.get("totalKwhCharged")),
+        value_fn=lambda device: device.total_energy_kwh,
     ),
-    GrohmSensorDescription(
-        key="current",
-        translation_key="current",
+    GrohmSensorEntityDescription(
+        key="car_current",
+        translation_key="car_current",
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
-        value_fn=lambda d, s: _num(s.get("maxCurrentCar")),
+        value_fn=_from_session(lambda session: session.car_current),
     ),
-    GrohmSensorDescription(
+    GrohmSensorEntityDescription(
         key="max_current",
         translation_key="max_current",
         device_class=SensorDeviceClass.CURRENT,
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda d, s: _num(s.get("maxCurrent")),
+        value_fn=_from_session(lambda session: session.max_current),
     ),
-    GrohmSensorDescription(
+    GrohmSensorEntityDescription(
         key="voltage",
-        translation_key="voltage",
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfElectricPotential.VOLT,
         suggested_display_precision=0,
-        value_fn=lambda d, s: voltage_volts(s),
+        value_fn=_from_session(lambda session: session.voltage),
     ),
-    GrohmSensorDescription(
+    GrohmSensorEntityDescription(
         key="charge_duration",
         translation_key="charge_duration",
         device_class=SensorDeviceClass.DURATION,
         native_unit_of_measurement=UnitOfTime.SECONDS,
         suggested_unit_of_measurement=UnitOfTime.MINUTES,
         suggested_display_precision=0,
-        value_fn=lambda d, s: _num(s.get("chargeSeconds")),
+        value_fn=_from_session(lambda session: session.charge_seconds),
     ),
-    GrohmSensorDescription(
+    GrohmSensorEntityDescription(
         key="session_start",
         translation_key="session_start",
         device_class=SensorDeviceClass.TIMESTAMP,
         entity_registry_enabled_default=False,
-        value_fn=_timestamp,
+        value_fn=_from_session(lambda session: session.created_at),
     ),
-    GrohmSensorDescription(
+    GrohmSensorEntityDescription(
         key="charging_phases",
         translation_key="charging_phases",
-        value_fn=lambda d, s: charging_phases(s, d),
-        exists_fn=is_three_phase,
+        value_fn=lambda device: device.charging_phases,
+        exists_fn=lambda device: device.three_phase,
     ),
-    GrohmSensorDescription(
+    GrohmSensorEntityDescription(
         key="wifi_signal",
-        translation_key="wifi_signal",
         device_class=SensorDeviceClass.SIGNAL_STRENGTH,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda d, s: _num(s.get("wifiPower")),
+        entity_registry_enabled_default=False,
+        value_fn=_from_session(lambda session: session.wifi_dbm),
     ),
-    GrohmSensorDescription(
+    GrohmSensorEntityDescription(
         key="nominal_power",
         translation_key="nominal_power",
         device_class=SensorDeviceClass.POWER,
         native_unit_of_measurement=UnitOfPower.KILO_WATT,
         entity_category=EntityCategory.DIAGNOSTIC,
         available_when_offline=True,
-        value_fn=lambda d, s: nominal_kw(d),
+        value_fn=lambda device: device.nominal_power_kw,
     ),
-    GrohmSensorDescription(
+    GrohmSensorEntityDescription(
         key="energy_price",
         translation_key="energy_price",
         native_unit_of_measurement="EUR/kWh",
         entity_category=EntityCategory.DIAGNOSTIC,
-        available_when_offline=True,
         suggested_display_precision=3,
-        value_fn=lambda d, s: _num(d.get("hourCost")),
+        available_when_offline=True,
+        value_fn=lambda device: device.energy_price,
     ),
 )
 
@@ -196,34 +166,38 @@ SENSORS: tuple[GrohmSensorDescription, ...] = (
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: GrohmConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    coordinator = entry.runtime_data
-    add_entities_for_new_devices(
-        coordinator,
+    """Set up the sensors."""
+    async_add_device_entities(
         entry,
         async_add_entities,
-        lambda device_id, device: [
-            GrohmSensor(coordinator, device_id, desc)
-            for desc in SENSORS
-            if desc.exists_fn(device)
-        ],
+        lambda coordinator, device: (
+            GrohmSensor(coordinator, device.id, description)
+            for description in SENSORS
+            if description.exists_fn(device)
+        ),
     )
 
 
 class GrohmSensor(GrohmEntity, SensorEntity):
-    entity_description: GrohmSensorDescription
+    """A sensor of a charger."""
+
+    entity_description: GrohmSensorEntityDescription
 
     def __init__(
         self,
         coordinator: GrohmCoordinator,
         device_id: str,
-        description: GrohmSensorDescription,
+        description: GrohmSensorEntityDescription,
     ) -> None:
+        """Initialize the sensor."""
         super().__init__(coordinator, device_id, description.key)
         self.entity_description = description
-        self._available_when_offline = description.available_when_offline
+        self.available_when_offline = description.available_when_offline
 
     @property
-    def native_value(self) -> Any:
-        return self.entity_description.value_fn(self.device, self.session)
+    def native_value(self) -> StateType:
+        """Return the state of the sensor."""
+        device = self.device
+        return self.entity_description.value_fn(device) if device else None

@@ -1,12 +1,13 @@
-"""Integrazione Home Assistant per le wallbox Grohm."""
+"""The Grohm integration."""
 
 from __future__ import annotations
 
+from grohm import GrohmClient
+
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.util.ssl import get_default_context
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
 
-from .api import GrohmApi, create_session
 from .coordinator import GrohmConfigEntry, GrohmCoordinator
 
 PLATFORMS: list[Platform] = [
@@ -19,28 +20,21 @@ PLATFORMS: list[Platform] = [
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: GrohmConfigEntry) -> bool:
-    """Login, prima lettura e creazione delle entità."""
-    # Sessione HTTP dedicata: il cookie di sessione Grohm non deve finire
-    # nel cookie jar condiviso di Home Assistant.
-    session = create_session(get_default_context())
-    api = GrohmApi(session, entry.data[CONF_EMAIL], entry.data[CONF_PASSWORD])
-    entry.async_on_unload(session.close)
-    coordinator = GrohmCoordinator(hass, entry, api)
+    """Set up Grohm from a config entry."""
+    # The API authenticates with a session cookie: use a session with a
+    # cookie jar of its own, not the shared one.
+    session = async_create_clientsession(hass)
+    client = GrohmClient(session, entry.data[CONF_EMAIL], entry.data[CONF_PASSWORD])
+    coordinator = GrohmCoordinator(hass, entry, client)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    entry.async_on_unload(entry.add_update_listener(_async_reload))
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: GrohmConfigEntry) -> bool:
-    """Scarica le piattaforme e chiude la sessione Grohm."""
-    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unloaded:
-        await entry.runtime_data.api.logout()
+    """Unload a config entry."""
+    if unloaded := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        await entry.runtime_data.client.logout()
     return unloaded
-
-
-async def _async_reload(hass: HomeAssistant, entry: GrohmConfigEntry) -> None:
-    await hass.config_entries.async_reload(entry.entry_id)

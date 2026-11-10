@@ -1,6 +1,18 @@
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "UP"]
-ignore = ["E501"]
+select = ["E", "F", "W", "I", "B", "UP", "D", "SIM"]
+ignore = ["E501", "D203", "D213"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D"]
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+known-first-party = ["custom_components.grohm"]
+known-third-party = ["grohm"]
+section-order = ["future", "standard-library", "third-party", "homeassistant", "first-party", "local-folder"]
+
+[tool.ruff.lint.isort.sections]
+homeassistant = ["homeassistant", "pytest_homeassistant_custom_component"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

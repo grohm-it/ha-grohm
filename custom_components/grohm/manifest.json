@@ -6,10 +6,15 @@
   ],
   "codeowners": [],
   "config_flow": true,
-  "documentation": "https://github.com/EmmeEsseSpA/ha-grohm",
+  "documentation": "https://github.com/grohm/ha-grohm",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/EmmeEsseSpA/ha-grohm/issues",
-  "requirements": [],
+  "issue_tracker": "https://github.com/grohm/ha-grohm/issues",
+  "loggers": [
+    "grohm"
+  ],
+  "requirements": [
+    "grohm==0.1.0"
+  ],
   "version": "0.1.0"
 }

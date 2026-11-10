@@ -2,49 +2,38 @@
   "config": {
     "step": {
       "user": {
-        "title": "Grohm account",
-        "description": "Sign in with the same credentials you use in the my-Grohm app. Only private and fleet-manager accounts are supported.",
+        "description": "Sign in with the account you use in the my-Grohm app. Private and fleet manager accounts are supported.",
         "data": {
           "email": "Email",
           "password": "Password"
         },
         "data_description": {
-          "email": "Email address of your my-Grohm account.",
-          "password": "Password of your my-Grohm account."
+          "email": "The email address of your my-Grohm account.",
+          "password": "The password of your my-Grohm account."
         }
       },
       "reauth_confirm": {
         "title": "Sign in again",
-        "description": "The session for {email} has expired or the password has changed. Enter the password again.",
+        "description": "The password of {email} was rejected. Enter the current password.",
         "data": {
           "password": "Password"
+        },
+        "data_description": {
+          "password": "The password of your my-Grohm account."
         }
       }
     },
     "error": {
       "invalid_auth": "Invalid email or password.",
-      "cannot_connect": "Unable to reach the Grohm server. Try again later.",
-      "installer_not_allowed": "Installer accounts are not supported. Use the account of the wallbox owner (private or fleet manager).",
+      "cannot_connect": "Unable to connect to the Grohm cloud.",
+      "installer_not_supported": "Installer accounts are not supported. Sign in with the account of the owner of the charger.",
       "account_type_missing": "This account has no account type yet. Open the my-Grohm app once to complete the setup, then try again.",
       "unknown": "Unexpected error."
     },
     "abort": {
       "already_configured": "This Grohm account is already configured.",
       "reauth_successful": "Signed in again successfully.",
-      "wrong_account": "The credentials belong to a different Grohm account."
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Grohm options",
-        "data": {
-          "scan_interval": "Update interval"
-        },
-        "data_description": {
-          "scan_interval": "How often (in seconds) to read the state of the wallboxes from the Grohm cloud."
-        }
-      }
+      "wrong_account": "These credentials belong to a different Grohm account."
     }
   },
   "entity": {
@@ -56,12 +45,8 @@
           "charging": "Charging",
           "finished": "Finished",
           "paused": "Paused",
-          "waiting": "Waiting",
-          "unknown": "Unknown"
+          "waiting": "Waiting"
         }
-      },
-      "power": {
-        "name": "Power"
       },
       "session_energy": {
         "name": "Session energy"
@@ -69,17 +54,14 @@
       "total_energy": {
         "name": "Total energy"
       },
-      "current": {
+      "car_current": {
         "name": "Car current"
       },
       "max_current": {
         "name": "Maximum current"
       },
-      "voltage": {
-        "name": "Voltage"
-      },
       "charge_duration": {
-        "name": "Charge duration"
+        "name": "Charging time"
       },
       "session_start": {
         "name": "Session start"
@@ -87,27 +69,19 @@
       "charging_phases": {
         "name": "Charging phases"
       },
-      "wifi_signal": {
-        "name": "Wi-Fi signal"
-      },
       "nominal_power": {
-        "name": "Nominal power"
+        "name": "Rated power"
       },
       "energy_price": {
         "name": "Energy price"
       }
     },
     "binary_sensor": {
-      "charging": {
-        "name": "Charging"
+      "car_connected": {
+        "name": "Car"
       },
       "force_charge": {
-        "name": "Forced charge active"
-      }
-    },
-    "lock": {
-      "lock": {
-        "name": "Lock"
+        "name": "Forced charge"
       }
     },
     "switch": {
@@ -123,16 +97,16 @@
   },
   "exceptions": {
     "auth_failed": {
-      "message": "Grohm authentication failed: sign in again."
+      "message": "The Grohm account could not sign in. Sign in again."
     },
     "unsupported_account": {
-      "message": "This Grohm account type is not supported (installer accounts cannot be used)."
+      "message": "This type of Grohm account is not supported. Installer accounts cannot be used."
     },
     "update_failed": {
-      "message": "Error while updating Grohm data: {error}"
+      "message": "Error while updating the Grohm data: {error}"
     },
     "command_failed": {
-      "message": "The Grohm wallbox command failed: {error}"
+      "message": "The charger did not accept the command: {error}"
     }
   }
 }
