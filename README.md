@@ -4,7 +4,7 @@ The official Home Assistant integration for [Grohm](https://grohm.it) EV
 chargers, made by Emme Esse S.p.A., the maker of Grohm. It connects to the
 Grohm cloud with the account of the my-Grohm app.
 
-[![Open your Home Assistant instance and open this repository in the Marketplace.](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=grohm&repository=ha-grohm&category=integration)
+[![Open your Home Assistant instance and open this repository in the Marketplace.](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=grohm-it&repository=ha-grohm&category=integration)
 
 ## Supported accounts
 
@@ -52,7 +52,7 @@ connectivity, total energy and the configuration values.
   for all chargers. It looks for new chargers every 10 minutes and adds them
   without a restart.
 - When the password changes, Home Assistant asks you to sign in again.
-- All communication goes through the [python-grohm](https://github.com/grohm/python-grohm)
+- All communication goes through the [python-grohm](https://github.com/grohm-it/python-grohm)
   library.
 
 ## Known limitations
